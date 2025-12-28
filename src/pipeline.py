@@ -7,10 +7,13 @@ Team Contribution: All team members - Integrated pipeline design
 
 import pandas as pd
 import numpy as np
+from typing import cast
 
 import logging
 from pathlib import Path
 from datetime import datetime
+
+from src.preprocessor import NECPreprocessor
 
 from .config import Config
 
@@ -126,6 +129,33 @@ class NECPipeline:
     
     def _preprocess_data(self):
         """Stage 2: Preprocess data"""
+        self.logger.info("\n" + "="*80)
+        self.logger.info("STAGE 2: PREPROCESSING")
+        self.logger.info("="*80)
+        
+        # Initialize and fit preprocessor
+        self.preprocessor = NECPreprocessor(
+            plant_filter_percentile=self.config.plant_filter_percentile,
+            missing_value_strategy=self.config.missing_value_strategy,
+            random_seed=self.config.random_seed
+        )
+        # Fit on full data
+        assert self.demand_df is not None and self.plants_df is not None and self.costs_df is not None, "Data must be loaded before preprocessing"
+        data_tuple = cast(tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame], (self.demand_df, self.plants_df, self.costs_df))
+        self.preprocessor.fit(data_tuple)
+        
+        # Transform
+        self.demand_df, self.plants_df, self.costs_df = self.preprocessor.transform(data_tuple)
+        
+        
+        # Log summary
+        summary = self.preprocessor.get_preprocessing_summary()
+        self.logger.info(f"Preprocessing completed:")
+        self.logger.info(f"  - Demand features: {summary['demand_features_count']}")
+        self.logger.info(f"  - Plant features: {summary['plant_features_count']}")
+        self.logger.info(f"  - Plants filtered: {summary['filtered_plants_count']}/{summary['total_plants_before']}")
+        self.logger.info(f"  - Good plants retained: {summary['good_plants_count']}")
+        self.logger.info(f"  - Final cost records: {len(self.costs_df)}")
         
     
     def _create_combined_dataset(self):
