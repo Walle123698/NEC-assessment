@@ -4,7 +4,7 @@ from sklearn.model_selection import GroupShuffleSplit, LeaveOneGroupOut
 from typing import Dict, Any, Tuple, List
 import logging
 
-from scorer import calculate_plant_selection_error_grouped, calculate_error_statistics, calculate_rmse
+from .scorer import calculate_plant_selection_error_grouped, calculate_error_statistics, calculate_rmse
 
 
 logger = logging.getLogger(__name__)
@@ -139,7 +139,7 @@ class Evaluator:
         logger.info("Evaluating on test set...")
         
         y_pred = model.predict(X_test)
-        demand_ids = combined_df_test['Demand_ID'].values
+        demand_ids = combined_df_test['Demand_ID'].to_numpy(copy=False)
         
         # Calculate selection errors
         errors = calculate_plant_selection_error_grouped(y_test, y_pred, demand_ids)
@@ -161,8 +161,8 @@ class Evaluator:
                                  combined_df_test: pd.DataFrame) -> pd.DataFrame:
         """Generate per-scenario selection table"""
         df = combined_df_test.copy()
-        df['Predicted_Cost'] = y_pred
-        df['Actual_Cost'] = y_true
+        df['Predicted_Cost'] = pd.to_numeric(y_pred, errors='coerce')
+        df['Actual_Cost'] = pd.to_numeric(y_true, errors='coerce')
         
         scenario_records = []
         
@@ -170,12 +170,12 @@ class Evaluator:
             # Oracle selection
             oracle_idx = group['Actual_Cost'].idxmin()
             oracle_plant = group.loc[oracle_idx, 'Plant_ID']
-            oracle_cost = group.loc[oracle_idx, 'Actual_Cost']
+            oracle_cost = float(pd.to_numeric(group.loc[oracle_idx, 'Actual_Cost'], errors='coerce'))
             
             # Model selection
             model_idx = group['Predicted_Cost'].idxmin()
             model_plant = group.loc[model_idx, 'Plant_ID']
-            model_cost = group.loc[model_idx, 'Actual_Cost']
+            model_cost = float(pd.to_numeric(group.loc[model_idx, 'Actual_Cost'], errors='coerce'))
             
             # Error
             error = model_cost - oracle_cost
@@ -219,9 +219,9 @@ class Evaluator:
         logger.info(f"Performing LOGO cross-validation ({n_folds} folds)...")
         
         all_features = demand_features + plant_features
-        X = combined_df[all_features].values.astype(np.float64)
-        y = combined_df['Cost'].values.astype(np.float64)
-        groups = combined_df['Demand_ID'].values
+        X = combined_df[all_features].to_numpy(dtype=np.float64)
+        y = combined_df['Cost'].to_numpy(dtype=np.float64)
+        groups = combined_df['Demand_ID'].to_numpy(dtype=np.int64, copy=False)
         
         logo = LeaveOneGroupOut()
         all_splits = list(logo.split(X, y, groups))

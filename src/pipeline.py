@@ -12,10 +12,11 @@ from typing import cast
 import logging
 from pathlib import Path
 from datetime import datetime
+from typing import Dict, Any
 
-from src.preprocessor import NECPreprocessor
-
-from .config import Config
+from .config import Config, load_config, save_effective_config
+from .preprocessor import NECPreprocessor
+from .evaluation import Evaluator
 
 
 # Setup logging
@@ -57,7 +58,7 @@ class NECPipeline:
         # Pipeline components
         self.preprocessor = None
         self.model = None
-        self.evaluator = None
+        self.evaluator = Evaluator(random_seed=config.random_seed)
         self.optimizer = None
         
         # Results storage
@@ -156,11 +157,24 @@ class NECPipeline:
         self.logger.info(f"  - Plants filtered: {summary['filtered_plants_count']}/{summary['total_plants_before']}")
         self.logger.info(f"  - Good plants retained: {summary['good_plants_count']}")
         self.logger.info(f"  - Final cost records: {len(self.costs_df)}")
-        
     
     def _create_combined_dataset(self):
         """Stage 3: Create combined dataset"""
+        self.logger.info("\n" + "="*80)
+        self.logger.info("STAGE 3: COMBINED DATASET CREATION")
+        self.logger.info("="*80)
         
+        assert self.demand_df is not None and self.plants_df is not None and self.costs_df is not None, "Data must be preprocessed before combining"
+        assert self.preprocessor is not None, "Preprocessor must be initialized before creating combined dataset"
+        assert self.preprocessor.demand_features_ is not None and self.preprocessor.plant_features_ is not None, "Preprocessor features must be fitted before creating combined dataset"
+        
+        self.combined_df = self.evaluator.create_combined_dataset(
+            self.demand_df,
+            self.plants_df,
+            self.costs_df,
+            self.preprocessor.demand_features_,
+            self.preprocessor.plant_features_
+        )
     
     def _train_baseline_model(self):
         """Stage 4: Train and evaluate baseline model"""
